@@ -3,26 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сканер штрихкодов</title>
+    <title>Сканер DataMatrix</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
+    
+    <style>
+        /* Убираем отступы и делаем черный фон */
+        body, html { margin: 0; padding: 0; background-color: #000; height: 100%; overflow: hidden; font-family: sans-serif; }
+        
+        #video-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        
+        /* Видео с камеры растягиваем на весь экран */
+        video { width: 100%; height: 100%; object-fit: cover; }
+        
+        /* Рисуем красивую рамку прицела для пользователя */
+        .scan-box {
+            position: absolute;
+            width: 250px;
+            height: 250px;
+            border: 3px solid #00ff00;
+            border-radius: 20px;
+            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.6); /* Затемняем всё вокруг рамки */
+        }
+        
+        #hint {
+            position: absolute;
+            bottom: 40px;
+            color: white;
+            font-size: 16px;
+            text-align: center;
+            width: 100%;
+            z-index: 10;
+        }
+    </style>
 </head>
 <body>
+
+    <div id="video-container">
+        <video id="video"></video>
+        <div class="scan-box"></div>
+        <div id="hint">Наведите сканер на DataMatrix...</div>
+    </div>
+
     <script>
-        // Сообщаем Telegram, что приложение готово
+        // Инициализируем Telegram
         window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand(); // Разворачиваем на весь экран
 
-        const params = {
-            text: "Наведите камеру на штрихкод товара"
-        };
+        // Создаем объект сканера (MultiFormat читает и QR, и EAN, и DataMatrix)
+        const codeReader = new ZXing.BrowserMultiFormatReader();
+        const hintElement = document.getElementById('hint');
 
-        // Запускаем сканер
-        window.Telegram.WebApp.showScanQrPopup(params, function(scannedText) {
-            // Отправляем отсканированный текст обратно в бота (и следовательно, на сервер 1С)
-            window.Telegram.WebApp.sendData(scannedText);
-            
-            // Возвращаем true, чтобы сканер закрылся после успешного чтения
-            return true;
-        });
+        // Получаем список всех камер устройства
+        codeReader.listVideoInputDevices()
+            .then((videoInputDevices) => {
+                if (videoInputDevices.length === 0) {
+                    hintElement.innerText = "Камера не найдена!";
+                    return;
+                }
+
+                // По умолчанию берем первую камеру
+                let selectedDeviceId = videoInputDevices[0].deviceId;
+                
+                // Пытаемся найти именно ЗАДНЮЮ камеру (чтобы не открылась фронталка)
+                for (const device of videoInputDevices) {
+                    const label = device.label.toLowerCase();
+                    if (label.includes('back') || label.includes('rear') || label.includes('задняя')) {
+                        selectedDeviceId = device.deviceId;
+                        break;
+                    }
+                }
+
+                // Запускаем непрерывное сканирование
+                codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
+                    if (result) {
+                        // КОД НАЙДЕН!
+                        // Вибрируем для обратной связи (работает на Android)
+                        if (navigator.vibrate) navigator.vibrate(200);
+                        
+                        // Отправляем текст штрихкода в 1С (через бота)
+                        window.Telegram.WebApp.sendData(result.text);
+                        
+                        // Принудительно закрываем окно Web App, чтобы выключить камеру
+                        window.Telegram.WebApp.close();
+                    }
+                    // Ошибки (err) здесь мы игнорируем, т.к. библиотека ругается на каждый кадр, 
+                    // в котором нет штрихкода (это нормально)
+                });
+            })
+            .catch((err) => {
+                console.error(err);
+                hintElement.innerText = "Ошибка доступа к камере. Проверьте разрешения.";
+            });
     </script>
 </body>
 </html>
