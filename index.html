@@ -2,38 +2,84 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Сканер DataMatrix</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
     
     <style>
-        /* Убираем отступы и делаем черный фон */
-        body, html { margin: 0; padding: 0; background-color: #000; height: 100%; overflow: hidden; font-family: sans-serif; }
-        
-        #video-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
-        
-        /* Видео с камеры растягиваем на весь экран */
-        video { width: 100%; height: 100%; object-fit: cover; }
-        
-        /* Рисуем красивую рамку прицела для пользователя */
-        .scan-box {
-            position: absolute;
-            width: 250px;
-            height: 250px;
-            border: 3px solid #00ff00;
-            border-radius: 20px;
-            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.6); /* Затемняем всё вокруг рамки */
+        /* Базовые настройки страницы */
+        body, html { 
+            margin: 0; 
+            padding: 0; 
+            background-color: #000; 
+            height: 100%; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
         }
         
-        #hint {
-            position: absolute;
-            bottom: 40px;
-            color: white;
-            font-size: 16px;
-            text-align: center;
+        #video-container { 
+            position: relative; 
+            width: 100vw; 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        
+        /* Видео на заднем фоне */
+        video { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            z-index: 1; 
+        }
+        
+        /* Рамка сканера и затемнение вокруг */
+        .scan-area {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            border-radius: 16px; /* Закругленные углы */
+            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.55); /* Тень, создающая затемнение всего экрана */
+            z-index: 2;
+            overflow: hidden; /* Чтобы лазер не выходил за рамки */
+        }
+
+        /* Анимированный лазер */
+        .laser {
             width: 100%;
-            z-index: 10;
+            height: 2px;
+            background-color: #33a852; /* Зеленый цвет Telegram */
+            box-shadow: 0 0 10px #33a852;
+            position: absolute;
+            top: 0;
+            left: 0;
+            animation: scan 2s infinite linear alternate; /* Анимация вверх-вниз */
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(248px); }
+        }
+
+        /* Плашка с подсказкой */
+        #hint {
+            position: relative;
+            margin-top: 40px;
+            color: #fff;
+            font-size: 15px;
+            text-align: center;
+            z-index: 2;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 20px;
+            transition: background 0.3s ease; /* Плавная смена цвета при успехе */
         }
     </style>
 </head>
@@ -41,20 +87,21 @@
 
     <div id="video-container">
         <video id="video" autoplay muted playsinline></video>
-        <div class="scan-box"></div>
-        <div id="hint">Наведите сканер на DataMatrix...3</div>
+        
+        <div class="scan-area">
+            <div class="laser"></div>
+        </div>
+        
+        <div id="hint">Наведите сканер на код...</div>
     </div>
 
     <script>
-        // Инициализируем Telegram
         window.Telegram.WebApp.ready();
         window.Telegram.WebApp.expand(); // Разворачиваем на весь экран
 
-        // Создаем объект сканера (MultiFormat читает и QR, и EAN, и DataMatrix)
         const codeReader = new ZXing.BrowserMultiFormatReader();
         const hintElement = document.getElementById('hint');
 
-        // Получаем список всех камер устройства
         codeReader.listVideoInputDevices()
             .then((videoInputDevices) => {
                 if (videoInputDevices.length === 0) {
@@ -62,38 +109,37 @@
                     return;
                 }
 
-                // По умолчанию берем первую камеру
-                let selectedDeviceId = videoInputDevices[0].deviceId;
-                
-                // Пытаемся найти именно ЗАДНЮЮ камеру (чтобы не открылась фронталка)
+                // Ищем основную камеру
+                let selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
                 for (const device of videoInputDevices) {
                     const label = device.label.toLowerCase();
-                    if (label.includes('back') || label.includes('rear') || label.includes('задняя')) {
+                    if (label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('задняя')) {
                         selectedDeviceId = device.deviceId;
                         break;
                     }
                 }
 
-                // Запускаем непрерывное сканирование
+                // Запуск сканирования
                 codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
                     if (result) {
-                        // КОД НАЙДЕН!
-                        // Вибрируем для обратной связи (работает на Android)
+                        // Обратная связь: вибрация, смена текста и цвета плашки
                         if (navigator.vibrate) navigator.vibrate(200);
+                        hintElement.innerText = "Код успешно считан!";
+                        hintElement.style.background = "#33a852"; // Делаем фон зеленым
                         
-                        // Отправляем текст штрихкода в 1С (через бота)
+                        // Отправляем данные в 1С
                         window.Telegram.WebApp.sendData(result.text);
                         
-                        // Принудительно закрываем окно Web App, чтобы выключить камеру
-                        window.Telegram.WebApp.close();
+                        // Закрываем окно с небольшой задержкой, чтобы пользователь увидел зеленый статус
+                        setTimeout(() => {
+                            window.Telegram.WebApp.close();
+                        }, 600);
                     }
-                    // Ошибки (err) здесь мы игнорируем, т.к. библиотека ругается на каждый кадр, 
-                    // в котором нет штрихкода (это нормально)
                 });
             })
             .catch((err) => {
                 console.error(err);
-                hintElement.innerText = "Ошибка доступа к камере. Проверьте разрешения.";
+                hintElement.innerText = "Ошибка камеры: " + err.message;
             });
     </script>
 </body>
