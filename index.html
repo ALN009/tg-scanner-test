@@ -37,15 +37,6 @@
         object-fit: cover;
         z-index: 1;
       }
-      #overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        z-index: 3;
-        pointer-events: none;
-      }
       .scan-area {
         position: relative;
         width: 260px;
@@ -98,7 +89,7 @@
         position: absolute;
         bottom: 40px;
         z-index: 4;
-        background: #ffffff;
+        background: #fff;
         border: none;
         border-radius: 50px;
         padding: 12px 20px;
@@ -110,7 +101,6 @@
   <body>
     <div id="video-container">
       <video id="video" autoplay muted playsinline></video>
-      <canvas id="overlay"></canvas>
       <div class="scan-area">
         <div class="laser"></div>
         <div class="mini-area"></div>
@@ -126,90 +116,54 @@
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
 
-      const codeReader = new ZXing.BrowserMultiFormatReader();
       const video = document.getElementById("video");
-      const canvas = document.getElementById("overlay");
-      const ctx = canvas.getContext("2d");
+      const codeReader = new ZXing.BrowserMultiFormatReader();
       const hint = document.getElementById("hint");
       const flashBtn = document.getElementById("flashBtn");
-
       let track = null;
       let torch = false;
 
-      init();
-
       async function init() {
         try {
-          // Разрешение на камеру один раз
+          // один раз запрашиваем разрешение
           await navigator.mediaDevices.getUserMedia({ video: true });
 
           const devices = await codeReader.listVideoInputDevices();
 
-          // Ищем macro камеру с автофокусом
           let deviceId = null;
+
+          // ищем macro/close/back камеру
           for (const d of devices) {
             const label = d.label.toLowerCase();
             if (
-              (label.includes("macro") || label.includes("close")) &&
+              label.includes("macro") ||
+              label.includes("close") ||
               label.includes("back")
             ) {
               deviceId = d.deviceId;
               break;
             }
           }
+          // fallback на первую камеру
+          if (!deviceId && devices.length > 0) deviceId = devices[0].deviceId;
 
-          // Если нет macro → ищем обычную заднюю
-          if (!deviceId) {
-            for (const d of devices) {
-              const label = d.label.toLowerCase();
-              if (
-                label.includes("back") ||
-                label.includes("rear") ||
-                label.includes("environment")
-              ) {
-                deviceId = d.deviceId;
-                break;
-              }
-            }
-          }
-
-          if (!deviceId) deviceId = devices[0].deviceId; // fallback
-
-          // Запускаем камеру
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              deviceId: { exact: deviceId },
-              focusMode: "continuous",
-            },
+            video: { deviceId: { exact: deviceId } },
           });
-
           video.srcObject = stream;
           track = stream.getVideoTracks()[0];
 
-          resizeCanvas();
           startScan();
-        } catch (err) {
-          hint.innerText = "Ошибка камеры: " + err.message;
+        } catch (e) {
+          hint.innerText = "Ошибка камеры: " + e.message;
         }
       }
 
-      function resizeCanvas() {
-        canvas.width = video.clientWidth;
-        canvas.height = video.clientHeight;
-      }
-      window.addEventListener("resize", resizeCanvas);
-
       function startScan() {
         codeReader.decodeFromVideoElementContinuously(video, (result, err) => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
           if (result) {
-            drawBox(result.resultPoints);
-
             if (navigator.vibrate) navigator.vibrate(200);
-
             hint.innerText = "Код считан";
-
             setTimeout(() => {
               window.Telegram.WebApp.sendData(result.text);
               window.Telegram.WebApp.close();
@@ -218,20 +172,7 @@
         });
       }
 
-      function drawBox(points) {
-        if (!points) return;
-
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(points[0].x, points[0].y);
-        for (let i = 1; i < points.length; i++) {
-          ctx.lineTo(points[i].x, points[i].y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-      }
-
+      // фонарик
       flashBtn.onclick = async () => {
         try {
           const capabilities = track.getCapabilities();
@@ -241,10 +182,10 @@
           }
           torch = !torch;
           await track.applyConstraints({ advanced: [{ torch: torch }] });
-        } catch (e) {
-          console.log(e);
-        }
+        } catch (e) {}
       };
+
+      init();
     </script>
   </body>
 </html>
