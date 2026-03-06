@@ -19,15 +19,16 @@
         overflow: hidden;
         font-family: system-ui;
       }
+
       #video-container {
         position: relative;
         width: 100vw;
         height: 100vh;
         display: flex;
-        flex-direction: column;
         justify-content: center;
         align-items: center;
       }
+
       video {
         position: absolute;
         top: 0;
@@ -37,21 +38,44 @@
         object-fit: cover;
         z-index: 1;
       }
+
+      /* Затемняющий overlay с "окном" */
+      .scan-overlay {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        pointer-events: none;
+        z-index: 2;
+        -webkit-transform: translateZ(0);
+        mask-image: radial-gradient(
+          circle 130px at center,
+          transparent 0%,
+          black 100%
+        );
+        -webkit-mask-image: radial-gradient(
+          circle 130px at center,
+          transparent 0%,
+          black 100%
+        );
+      }
+
       .scan-area {
-        position: relative;
+        position: absolute;
         width: 260px;
         height: 260px;
-        border: 2px solid rgba(255, 255, 255, 0.7);
-        border-radius: 16px;
-        box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.55);
-        z-index: 2;
-        overflow: hidden;
-      }
-      .mini-area {
-        position: absolute;
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
+        border: 2px solid rgba(255, 255, 255, 0.7);
+        border-radius: 16px;
+        z-index: 3;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        -webkit-transform: translateZ(0);
+      }
+
+      .mini-area {
         width: 100px;
         height: 100px;
         border: 2px solid #fff;
@@ -59,6 +83,7 @@
         background-color: #fff;
         opacity: 0.3;
       }
+
       .laser {
         width: 100%;
         height: 2px;
@@ -68,6 +93,7 @@
         top: 0;
         animation: scan 2s infinite linear alternate;
       }
+
       @keyframes scan {
         0% {
           transform: translateY(0);
@@ -76,17 +102,20 @@
           transform: translateY(258px);
         }
       }
+
       #hint {
-        margin-top: 40px;
+        position: absolute;
+        bottom: 120px;
         color: white;
         font-size: 15px;
         background: rgba(0, 0, 0, 0.6);
         padding: 10px 20px;
         border-radius: 20px;
-        z-index: 2;
+        z-index: 4;
         text-align: center;
         max-width: 300px;
       }
+
       #flashBtn {
         position: absolute;
         bottom: 40px;
@@ -103,10 +132,16 @@
   <body>
     <div id="video-container">
       <video id="video" autoplay muted playsinline></video>
+
+      <!-- Overlay затемнения с прозрачным центром -->
+      <div class="scan-overlay"></div>
+
+      <!-- Рамка сканирования -->
       <div class="scan-area">
         <div class="laser"></div>
         <div class="mini-area"></div>
       </div>
+
       <div id="hint">
         Наведите рамку на QR-код<br />
         Держите объект на расстоянии 10-15 см
@@ -128,7 +163,6 @@
 
       async function init() {
         try {
-          // Разрешение камеры один раз
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: "environment" },
           });
@@ -154,7 +188,6 @@
         });
       }
 
-      // Фонарик по кнопке
       flashBtn.onclick = async () => {
         try {
           if (!track) return;
