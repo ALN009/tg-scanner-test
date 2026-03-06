@@ -82,23 +82,6 @@
         border-radius: 20px;
         z-index: 2;
       }
-
-      .controls {
-        position: absolute;
-        bottom: 40px;
-        display: flex;
-        gap: 15px;
-        z-index: 3;
-      }
-
-      button {
-        border: none;
-        padding: 12px 18px;
-        border-radius: 12px;
-        font-size: 14px;
-        background: #33a852;
-        color: white;
-      }
     </style>
   </head>
 
@@ -111,11 +94,6 @@
       </div>
 
       <div id="hint">Наведите камеру на код</div>
-
-      <div class="controls">
-        <button id="switchCamera">Сменить камеру</button>
-        <button id="flashBtn">Фонарик</button>
-      </div>
     </div>
 
     <script>
@@ -126,52 +104,82 @@
 
       const video = document.getElementById("video");
       const hint = document.getElementById("hint");
-      const switchBtn = document.getElementById("switchCamera");
-      const flashBtn = document.getElementById("flashBtn");
 
-      let devices = [];
-      let currentCamera = 0;
-      let scanning = true;
-      let torchEnabled = false;
+      let selectedDeviceId = null;
       let track = null;
+      let torchEnabled = false;
 
-      const SCAN_TIMEOUT = 5000;
+      const SCAN_TIMEOUT = 4000;
+
+      initScanner();
 
       async function initScanner() {
-        devices = await codeReader.listVideoInputDevices();
+        try {
+          const devices = await codeReader.listVideoInputDevices();
 
-        if (devices.length === 0) {
-          hint.innerText = "Камера не найдена";
-          return;
+          if (devices.length === 0) {
+            hint.innerText = "Камера не найдена";
+            return;
+          }
+
+          await selectBestCamera(devices);
+
+          startScanner();
+        } catch (err) {
+          hint.innerText = "Ошибка камеры: " + err.message;
         }
-
-        /* пытаемся найти заднюю камеру */
-
-        let backIndex = devices.findIndex(
-          (d) =>
-            d.label.toLowerCase().includes("back") ||
-            d.label.toLowerCase().includes("rear") ||
-            d.label.toLowerCase().includes("environment"),
-        );
-
-        currentCamera = backIndex !== -1 ? backIndex : 0;
-
-        startCamera();
       }
 
-      function startCamera() {
-        scanning = true;
+      async function selectBestCamera(devices) {
+        for (const device of devices) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: device.deviceId },
+            });
 
+            const testTrack = stream.getVideoTracks()[0];
+            const capabilities = testTrack.getCapabilities();
+
+            const hasAutoFocus =
+              capabilities.focusMode ||
+              capabilities.focusDistance ||
+              (capabilities.focusMode &&
+                capabilities.focusMode.includes("continuous"));
+
+            const label = device.label.toLowerCase();
+
+            const isBack =
+              label.includes("back") ||
+              label.includes("rear") ||
+              label.includes("environment");
+
+            if (hasAutoFocus && isBack) {
+              selectedDeviceId = device.deviceId;
+
+              stream.getTracks().forEach((t) => t.stop());
+
+              return;
+            }
+
+            stream.getTracks().forEach((t) => t.stop());
+          } catch (e) {}
+        }
+
+        selectedDeviceId = devices[devices.length - 1].deviceId;
+
+        hint.innerText =
+          "ваша камера не имеет автофокуса пожалуйста поднесите qr ближе";
+      }
+
+      function startScanner() {
         codeReader.decodeFromVideoDevice(
-          devices[currentCamera].deviceId,
+          selectedDeviceId,
           video,
           (result, err) => {
             if (result) {
-              scanning = false;
-
               if (navigator.vibrate) navigator.vibrate(200);
 
-              hint.innerText = "Код считан";
+              hint.innerText = "Код успешно считан";
 
               window.Telegram.WebApp.sendData(result.text);
 
@@ -182,65 +190,36 @@
           },
         );
 
-        setTimeout(() => {
-          if (scanning) {
-            currentCamera++;
+        setTimeout(setupCameraFeatures, 1000);
 
-            if (currentCamera >= devices.length) {
-              hint.innerText = "Не удалось распознать изображение";
-              codeReader.reset();
-              return;
-            }
-
-            hint.innerText = "Пробуем другую камеру";
-
-            codeReader.reset();
-            startCamera();
-          }
-        }, SCAN_TIMEOUT);
-
-        setTimeout(setupTorch, 1000);
+        setTimeout(autoTorch, SCAN_TIMEOUT);
       }
 
-      function switchCamera() {
-        codeReader.reset();
-
-        currentCamera++;
-
-        if (currentCamera >= devices.length) currentCamera = 0;
-
-        hint.innerText = "Переключение камеры";
-
-        startCamera();
-      }
-
-      switchBtn.onclick = switchCamera;
-
-      async function setupTorch() {
+      async function setupCameraFeatures() {
         try {
-          track = video.srcObject.getVideoTracks()[0];
+          const stream = video.srcObject;
+
+          track = stream.getVideoTracks()[0];
+        } catch (e) {}
+      }
+
+      async function autoTorch() {
+        try {
+          if (!track) return;
 
           const capabilities = track.getCapabilities();
 
-          if (capabilities.torch) {
-            flashBtn.style.display = "block";
-          } else {
-            flashBtn.style.display = "none";
-          }
-        } catch {}
+          if (!capabilities.torch) return;
+
+          if (torchEnabled) return;
+
+          torchEnabled = true;
+
+          await track.applyConstraints({
+            advanced: [{ torch: true }],
+          });
+        } catch (e) {}
       }
-
-      flashBtn.onclick = async () => {
-        if (!track) return;
-
-        torchEnabled = !torchEnabled;
-
-        await track.applyConstraints({
-          advanced: [{ torch: torchEnabled }],
-        });
-      };
-
-      initScanner();
     </script>
   </body>
 </html>
