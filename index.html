@@ -2,12 +2,9 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-    <title>Сканер DataMatrix</title>
+    <title>QR Scanner</title>
 
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
@@ -17,138 +14,97 @@
       html {
         margin: 0;
         padding: 0;
-        background: #000;
+        background: black;
         height: 100%;
         overflow: hidden;
         font-family: system-ui;
       }
 
-      #video-container {
+      #container {
         position: relative;
         width: 100vw;
         height: 100vh;
         display: flex;
         flex-direction: column;
-        justify-content: center;
         align-items: center;
+        justify-content: center;
       }
 
       video {
         position: absolute;
-        top: 0;
-        left: 0;
         width: 100%;
         height: 100%;
         object-fit: cover;
-        z-index: 1;
       }
 
-      /* canvas для рамки */
-      #overlay {
+      canvas {
         position: absolute;
-        top: 0;
-        left: 0;
         width: 100%;
         height: 100%;
-        z-index: 3;
         pointer-events: none;
       }
 
-      .scan-area {
-        position: relative;
+      .scan {
         width: 260px;
         height: 260px;
-        border: 2px solid rgba(255, 255, 255, 0.7);
+        border: 2px solid white;
         border-radius: 16px;
         box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.55);
         z-index: 2;
-        overflow: hidden;
-      }
-
-      .mini-area {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 100px;
-        height: 100px;
-        border: 2px solid #fff;
-        border-radius: 10px;
-      }
-
-      .laser {
-        width: 100%;
-        height: 2px;
-        background: #33a852;
-        box-shadow: 0 0 10px #33a852;
-        position: absolute;
-        top: 0;
-        animation: scan 2s infinite linear alternate;
-      }
-
-      @keyframes scan {
-        0% {
-          transform: translateY(0);
-        }
-        100% {
-          transform: translateY(258px);
-        }
       }
 
       #hint {
-        margin-top: 40px;
+        position: absolute;
+        bottom: 120px;
         color: white;
-        font-size: 15px;
         background: rgba(0, 0, 0, 0.6);
-        padding: 10px 20px;
+        padding: 12px 18px;
         border-radius: 20px;
-        z-index: 2;
+        font-size: 14px;
+        text-align: center;
+        max-width: 300px;
       }
 
-      /* кнопка фонарика */
-
-      #flashBtn {
+      #flash {
         position: absolute;
         bottom: 40px;
-        z-index: 4;
-        background: #ffffff;
+        background: white;
         border: none;
-        border-radius: 50px;
+        border-radius: 30px;
         padding: 12px 20px;
         font-size: 16px;
-        cursor: pointer;
       }
     </style>
   </head>
 
   <body>
-    <div id="video-container">
-      <video id="video" autoplay muted playsinline></video>
+    <div id="container">
+      <video id="video" autoplay playsinline></video>
 
       <canvas id="overlay"></canvas>
 
-      <div class="scan-area">
-        <div class="laser"></div>
-        <div class="mini-area"></div>
+      <div class="scan"></div>
+
+      <div id="hint">
+        держите объект на расстоянии 10-15см и наведите внутреннюю рамку на QR
+        код
       </div>
 
-      <div id="hint">Наведите камеру на код</div>
-
-      <button id="flashBtn">🔦 Фонарик</button>
+      <button id="flash">Фонарик</button>
     </div>
 
     <script>
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
 
-      const codeReader = new ZXing.BrowserMultiFormatReader();
-
       const video = document.getElementById("video");
       const canvas = document.getElementById("overlay");
       const ctx = canvas.getContext("2d");
 
       const hint = document.getElementById("hint");
-      const flashBtn = document.getElementById("flashBtn");
+      const flashBtn = document.getElementById("flash");
+
+      const codeReader = new ZXing.BrowserMultiFormatReader();
 
       let track = null;
       let torch = false;
@@ -157,30 +113,56 @@
 
       async function init() {
         try {
+          /* один запрос камеры */
+
           await navigator.mediaDevices.getUserMedia({ video: true });
+
+          /* список камер */
 
           const devices = await codeReader.listVideoInputDevices();
 
-          let deviceId = devices[0].deviceId;
+          /* поиск macro камеры */
+
+          let deviceId = null;
 
           for (const d of devices) {
             const label = d.label.toLowerCase();
 
-            if (
-              label.includes("back") ||
-              label.includes("rear") ||
-              label.includes("environment")
-            ) {
+            if (label.includes("macro") || label.includes("close")) {
               deviceId = d.deviceId;
               break;
             }
           }
 
+          /* если нет macro ищем заднюю */
+
+          if (!deviceId) {
+            for (const d of devices) {
+              const label = d.label.toLowerCase();
+
+              if (
+                label.includes("back") ||
+                label.includes("rear") ||
+                label.includes("environment")
+              ) {
+                deviceId = d.deviceId;
+                break;
+              }
+            }
+          }
+
+          /* fallback */
+
+          if (!deviceId) {
+            deviceId = devices[0].deviceId;
+          }
+
+          /* запуск камеры */
+
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
-              deviceId: deviceId,
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
+              deviceId: { exact: deviceId },
+              focusMode: "continuous",
             },
           });
 
@@ -190,9 +172,9 @@
 
           resizeCanvas();
 
-          startScan();
-        } catch (err) {
-          hint.innerText = "Ошибка камеры: " + err.message;
+          startScanner();
+        } catch (e) {
+          hint.innerText = "Ошибка камеры: " + e.message;
         }
       }
 
@@ -203,14 +185,14 @@
 
       window.addEventListener("resize", resizeCanvas);
 
-      function startScan() {
+      function startScanner() {
         codeReader.decodeFromVideoElementContinuously(video, (result, err) => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
           if (result) {
             drawBox(result.resultPoints);
 
-            if (navigator.vibrate) navigator.vibrate(200);
+            navigator.vibrate?.(200);
 
             hint.innerText = "Код считан";
 
@@ -240,15 +222,14 @@
         ctx.stroke();
       }
 
-      /* кнопка фонарика */
+      /* фонарик */
 
       flashBtn.onclick = async () => {
         try {
-          const capabilities = track.getCapabilities();
+          const cap = track.getCapabilities();
 
-          if (!capabilities.torch) {
+          if (!cap.torch) {
             hint.innerText = "Фонарик не поддерживается";
-
             return;
           }
 
@@ -257,9 +238,7 @@
           await track.applyConstraints({
             advanced: [{ torch: torch }],
           });
-        } catch (e) {
-          console.log(e);
-        }
+        } catch (e) {}
       };
     </script>
   </body>
