@@ -1,146 +1,184 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
     <title>Сканер DataMatrix</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
-    
+    <script
+      type="text/javascript"
+      src="https://unpkg.com/@zxing/library@latest"
+    ></script>
+
     <style>
-        /* Базовые настройки страницы */
-        body, html { 
-            margin: 0; 
-            padding: 0; 
-            background-color: #000; 
-            height: 100%; 
-            overflow: hidden; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
-        }
-        
-        #video-container { 
-            position: relative; 
-            width: 100vw; 
-            height: 100vh; 
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center; 
-        }
-        
-        /* Видео на заднем фоне */
-        video { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            object-fit: cover; 
-            z-index: 1; 
-        }
-        
-        /* Рамка сканера и затемнение вокруг */
-        .scan-area {
-            position: relative;
-            width: 250px;
-            height: 250px;
-            border: 2px solid rgba(255, 255, 255, 0.6);
-            border-radius: 16px; /* Закругленные углы */
-            box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.55); /* Тень, создающая затемнение всего экрана */
-            z-index: 2;
-            overflow: hidden; /* Чтобы лазер не выходил за рамки */
-        }
+      /* Базовые настройки страницы */
+      body,
+      html {
+        margin: 0;
+        padding: 0;
+        background-color: #000;
+        height: 100%;
+        overflow: hidden;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+      }
 
-        /* Анимированный лазер */
-        .laser {
-            width: 100%;
-            height: 2px;
-            background-color: #33a852; /* Зеленый цвет Telegram */
-            box-shadow: 0 0 10px #33a852;
-            position: absolute;
-            top: 0;
-            left: 0;
-            animation: scan 2s infinite linear alternate; /* Анимация вверх-вниз */
-        }
+      #video-container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
 
-        @keyframes scan {
-            0% { transform: translateY(0); }
-            100% { transform: translateY(248px); }
-        }
+      /* Видео на заднем фоне */
+      video {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: 1;
+      }
 
-        /* Плашка с подсказкой */
-        #hint {
-            position: relative;
-            margin-top: 40px;
-            color: #fff;
-            font-size: 15px;
-            text-align: center;
-            z-index: 2;
-            background: rgba(0, 0, 0, 0.6);
-            padding: 10px 20px;
-            border-radius: 20px;
-            transition: background 0.3s ease; /* Плавная смена цвета при успехе */
+      /* Рамка сканера и затемнение вокруг */
+      .scan-area {
+        position: relative;
+        width: 250px;
+        height: 250px;
+        border: 2px solid rgba(255, 255, 255, 0.6);
+        border-radius: 16px; /* Закругленные углы */
+        box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.55); /* Тень, создающая затемнение всего экрана */
+        z-index: 2;
+        overflow: hidden; /* Чтобы лазер не выходил за рамки */
+      }
+
+      /* Анимированный лазер */
+      .laser {
+        width: 100%;
+        height: 2px;
+        background-color: #33a852; /* Зеленый цвет Telegram */
+        box-shadow: 0 0 10px #33a852;
+        position: absolute;
+        top: 0;
+        left: 0;
+        animation: scan 2s infinite linear alternate; /* Анимация вверх-вниз */
+      }
+
+      @keyframes scan {
+        0% {
+          transform: translateY(0);
         }
+        100% {
+          transform: translateY(248px);
+        }
+      }
+
+      /* Плашка с подсказкой */
+      #hint {
+        position: relative;
+        margin-top: 40px;
+        color: #fff;
+        font-size: 15px;
+        text-align: center;
+        z-index: 2;
+        background: rgba(0, 0, 0, 0.6);
+        padding: 10px 20px;
+        border-radius: 20px;
+        transition: background 0.3s ease; /* Плавная смена цвета при успехе */
+      }
     </style>
-</head>
-<body>
-
+  </head>
+  <body>
     <div id="video-container">
-        <video id="video" autoplay muted playsinline></video>
-        
-        <div class="scan-area">
-            <div class="laser"></div>
-        </div>
-        
-        <div id="hint">Наведите сканер на код...</div>
+      <video id="video" autoplay muted playsinline></video>
+
+      <div class="scan-area">
+        <div class="laser"></div>
+      </div>
+
+      <div id="hint">Наведите сканер на код...</div>
     </div>
 
     <script>
-        window.Telegram.WebApp.ready();
-        window.Telegram.WebApp.expand(); // Разворачиваем на весь экран
+      window.Telegram.WebApp.ready();
+      window.Telegram.WebApp.expand();
 
-        const codeReader = new ZXing.BrowserMultiFormatReader();
-        const hintElement = document.getElementById('hint');
+      const codeReader = new ZXing.BrowserMultiFormatReader();
+      const hintElement = document.getElementById("hint");
 
-        codeReader.listVideoInputDevices()
-            .then((videoInputDevices) => {
-                if (videoInputDevices.length === 0) {
-                    hintElement.innerText = "Камера не найдена!";
-                    return;
-                }
+      let devices = [];
+      let currentCameraIndex = 0;
+      let scanning = false;
 
-                // Ищем основную камеру
-                let selectedDeviceId = videoInputDevices[videoInputDevices.length - 1].deviceId;
-                for (const device of videoInputDevices) {
-                    const label = device.label.toLowerCase();
-                    if (label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('задняя')) {
-                        selectedDeviceId = device.deviceId;
-                        break;
-                    }
-                }
+      const SCAN_TIME_PER_CAMERA = 4000; // сколько секунд пробуем камеру
 
-                // Запуск сканирования
-                codeReader.decodeFromVideoDevice(selectedDeviceId, 'video', (result, err) => {
-                    if (result) {
-                        // Обратная связь: вибрация, смена текста и цвета плашки
-                        if (navigator.vibrate) navigator.vibrate(200);
-                        hintElement.innerText = "Код успешно считан!";
-                        hintElement.style.background = "#33a852"; // Делаем фон зеленым
-                        
-                        // Отправляем данные в 1С
-                        window.Telegram.WebApp.sendData(result.text);
-                        
-                        // Закрываем окно с небольшой задержкой, чтобы пользователь увидел зеленый статус
-                        setTimeout(() => {
-                            window.Telegram.WebApp.close();
-                        }, 600);
-                    }
-                });
-            })
-            .catch((err) => {
-                console.error(err);
-                hintElement.innerText = "Ошибка камеры: " + err.message;
-            });
+      async function startScanner() {
+        try {
+          devices = await codeReader.listVideoInputDevices();
+
+          if (devices.length === 0) {
+            hintElement.innerText = "Камера не найдена!";
+            return;
+          }
+
+          tryNextCamera();
+        } catch (err) {
+          hintElement.innerText = "Ошибка камеры: " + err.message;
+        }
+      }
+
+      function tryNextCamera() {
+        if (currentCameraIndex >= devices.length) {
+          hintElement.innerText = "Не удалось распознать изображение";
+          codeReader.reset();
+          return;
+        }
+
+        const deviceId = devices[currentCameraIndex].deviceId;
+
+        hintElement.innerText = "Пробуем камеру " + (currentCameraIndex + 1);
+
+        scanning = true;
+
+        codeReader.decodeFromVideoDevice(deviceId, "video", (result, err) => {
+          if (!scanning) return;
+
+          if (result) {
+            scanning = false;
+
+            if (navigator.vibrate) navigator.vibrate(200);
+
+            hintElement.innerText = "Код успешно считан!";
+            hintElement.style.background = "#33a852";
+
+            window.Telegram.WebApp.sendData(result.text);
+
+            setTimeout(() => {
+              window.Telegram.WebApp.close();
+            }, 600);
+          }
+        });
+
+        setTimeout(() => {
+          if (scanning) {
+            codeReader.reset();
+
+            currentCameraIndex++;
+
+            tryNextCamera();
+          }
+        }, SCAN_TIME_PER_CAMERA);
+      }
+
+      startScanner();
     </script>
-</body>
+  </body>
 </html>
