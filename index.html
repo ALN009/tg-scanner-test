@@ -2,109 +2,136 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-
-    <title>QR Scanner</title>
-
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Сканер DataMatrix</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://unpkg.com/@zxing/library@latest"></script>
-
     <style>
       body,
       html {
         margin: 0;
         padding: 0;
-        background: black;
+        background: #000;
         height: 100%;
         overflow: hidden;
         font-family: system-ui;
       }
-
-      #container {
+      #video-container {
         position: relative;
         width: 100vw;
         height: 100vh;
         display: flex;
         flex-direction: column;
-        align-items: center;
         justify-content: center;
+        align-items: center;
       }
-
       video {
         position: absolute;
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
         object-fit: cover;
+        z-index: 1;
       }
-
-      canvas {
+      #overlay {
         position: absolute;
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
+        z-index: 3;
         pointer-events: none;
       }
-
-      .scan {
+      .scan-area {
+        position: relative;
         width: 260px;
         height: 260px;
-        border: 2px solid white;
+        border: 2px solid rgba(255, 255, 255, 0.7);
         border-radius: 16px;
         box-shadow: 0 0 0 4000px rgba(0, 0, 0, 0.55);
         z-index: 2;
+        overflow: hidden;
       }
-
-      #hint {
+      .mini-area {
         position: absolute;
-        bottom: 120px;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100px;
+        height: 100px;
+        border: 2px solid #fff;
+        border-radius: 10px;
+      }
+      .laser {
+        width: 100%;
+        height: 2px;
+        background: #33a852;
+        box-shadow: 0 0 10px #33a852;
+        position: absolute;
+        top: 0;
+        animation: scan 2s infinite linear alternate;
+      }
+      @keyframes scan {
+        0% {
+          transform: translateY(0);
+        }
+        100% {
+          transform: translateY(258px);
+        }
+      }
+      #hint {
+        margin-top: 40px;
         color: white;
+        font-size: 15px;
         background: rgba(0, 0, 0, 0.6);
-        padding: 12px 18px;
+        padding: 10px 20px;
         border-radius: 20px;
-        font-size: 14px;
+        z-index: 2;
         text-align: center;
         max-width: 300px;
       }
-
-      #flash {
+      #flashBtn {
         position: absolute;
         bottom: 40px;
-        background: white;
+        z-index: 4;
+        background: #ffffff;
         border: none;
-        border-radius: 30px;
+        border-radius: 50px;
         padding: 12px 20px;
         font-size: 16px;
+        cursor: pointer;
       }
     </style>
   </head>
-
   <body>
-    <div id="container">
-      <video id="video" autoplay playsinline></video>
-
+    <div id="video-container">
+      <video id="video" autoplay muted playsinline></video>
       <canvas id="overlay"></canvas>
-
-      <div class="scan"></div>
-
+      <div class="scan-area">
+        <div class="laser"></div>
+        <div class="mini-area"></div>
+      </div>
       <div id="hint">
-        держите объект на расстоянии 10-15см и наведите внутреннюю рамку на QR
+        Держите объект на расстоянии 10-15 см и наведите внутреннюю рамку на QR
         код
       </div>
-
-      <button id="flash">Фонарик</button>
+      <button id="flashBtn">🔦 Фонарик</button>
     </div>
 
     <script>
       window.Telegram.WebApp.ready();
       window.Telegram.WebApp.expand();
 
+      const codeReader = new ZXing.BrowserMultiFormatReader();
       const video = document.getElementById("video");
       const canvas = document.getElementById("overlay");
       const ctx = canvas.getContext("2d");
-
       const hint = document.getElementById("hint");
-      const flashBtn = document.getElementById("flash");
-
-      const codeReader = new ZXing.BrowserMultiFormatReader();
+      const flashBtn = document.getElementById("flashBtn");
 
       let track = null;
       let torch = false;
@@ -113,33 +140,28 @@
 
       async function init() {
         try {
-          /* один запрос камеры */
-
+          // Разрешение на камеру один раз
           await navigator.mediaDevices.getUserMedia({ video: true });
-
-          /* список камер */
 
           const devices = await codeReader.listVideoInputDevices();
 
-          /* поиск macro камеры */
-
+          // Ищем macro камеру с автофокусом
           let deviceId = null;
-
           for (const d of devices) {
             const label = d.label.toLowerCase();
-
-            if (label.includes("macro") || label.includes("close")) {
+            if (
+              (label.includes("macro") || label.includes("close")) &&
+              label.includes("back")
+            ) {
               deviceId = d.deviceId;
               break;
             }
           }
 
-          /* если нет macro ищем заднюю */
-
+          // Если нет macro → ищем обычную заднюю
           if (!deviceId) {
             for (const d of devices) {
               const label = d.label.toLowerCase();
-
               if (
                 label.includes("back") ||
                 label.includes("rear") ||
@@ -151,14 +173,9 @@
             }
           }
 
-          /* fallback */
+          if (!deviceId) deviceId = devices[0].deviceId; // fallback
 
-          if (!deviceId) {
-            deviceId = devices[0].deviceId;
-          }
-
-          /* запуск камеры */
-
+          // Запускаем камеру
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               deviceId: { exact: deviceId },
@@ -167,14 +184,12 @@
           });
 
           video.srcObject = stream;
-
           track = stream.getVideoTracks()[0];
 
           resizeCanvas();
-
-          startScanner();
-        } catch (e) {
-          hint.innerText = "Ошибка камеры: " + e.message;
+          startScan();
+        } catch (err) {
+          hint.innerText = "Ошибка камеры: " + err.message;
         }
       }
 
@@ -182,17 +197,16 @@
         canvas.width = video.clientWidth;
         canvas.height = video.clientHeight;
       }
-
       window.addEventListener("resize", resizeCanvas);
 
-      function startScanner() {
+      function startScan() {
         codeReader.decodeFromVideoElementContinuously(video, (result, err) => {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
 
           if (result) {
             drawBox(result.resultPoints);
 
-            navigator.vibrate?.(200);
+            if (navigator.vibrate) navigator.vibrate(200);
 
             hint.innerText = "Код считан";
 
@@ -209,36 +223,27 @@
 
         ctx.strokeStyle = "white";
         ctx.lineWidth = 4;
-
         ctx.beginPath();
-
         ctx.moveTo(points[0].x, points[0].y);
-
         for (let i = 1; i < points.length; i++) {
           ctx.lineTo(points[i].x, points[i].y);
         }
-
         ctx.closePath();
         ctx.stroke();
       }
 
-      /* фонарик */
-
       flashBtn.onclick = async () => {
         try {
-          const cap = track.getCapabilities();
-
-          if (!cap.torch) {
+          const capabilities = track.getCapabilities();
+          if (!capabilities.torch) {
             hint.innerText = "Фонарик не поддерживается";
             return;
           }
-
           torch = !torch;
-
-          await track.applyConstraints({
-            advanced: [{ torch: torch }],
-          });
-        } catch (e) {}
+          await track.applyConstraints({ advanced: [{ torch: torch }] });
+        } catch (e) {
+          console.log(e);
+        }
       };
     </script>
   </body>
