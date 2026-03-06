@@ -46,27 +46,23 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: radial-gradient(
-          circle 130px at center,
-          transparent 0%,
-          rgba(0, 0, 0, 0.55) 100%
-        );
+        background: rgba(0, 0, 0, 0.55); /* полностью затемняет экран */
         pointer-events: none;
         z-index: 2;
         -webkit-transform: translateZ(0);
       }
 
-      /* Рамка сканирования */
       .scan-area {
-        position: relative; /* центрируется flex контейнером */
+        position: relative;
         width: 260px;
         height: 260px;
-        border: 2px solid rgba(255, 255, 255, 0.7);
+        border: 2px solid rgba(255, 255, 255, 0.7); /* рамка видна поверх overlay */
         border-radius: 16px;
         z-index: 3;
         display: flex;
         justify-content: center;
         align-items: center;
+        background: transparent; /* без заливки */
       }
 
       .mini-area {
