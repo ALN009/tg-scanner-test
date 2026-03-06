@@ -147,10 +147,13 @@
           if (result) {
             if (navigator.vibrate) navigator.vibrate(200);
             hint.innerText = "Код считан";
-            setTimeout(() => {
-              window.Telegram.WebApp.sendData(result.text);
-              window.Telegram.WebApp.close();
-            }, 500);
+
+            // Скрываем элементы, но не закрываем WebApp
+            video.style.display = "none";
+            document.querySelector(".scan-area").style.display = "none";
+            flashBtn.style.display = "none";
+
+            window.Telegram.WebApp.sendData(result.text);
           }
         });
       }
