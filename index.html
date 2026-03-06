@@ -98,6 +98,17 @@
         font-size: 16px;
         cursor: pointer;
       }
+      #closeBtn {
+        position: absolute;
+        bottom: 100px;
+        z-index: 4;
+        background: #fff;
+        border: none;
+        border-radius: 50px;
+        padding: 12px 20px;
+        font-size: 16px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
@@ -109,10 +120,10 @@
       </div>
       <div id="hint">
         Наведите рамку на QR-код<br />
-
         Держите объект на расстоянии 10-15 см
       </div>
       <button id="flashBtn">Фонарик</button>
+      <button id="closeBtn">Закрыть сканер</button>
     </div>
 
     <script>
@@ -122,14 +133,18 @@
       const video = document.getElementById("video");
       const hint = document.getElementById("hint");
       const flashBtn = document.getElementById("flashBtn");
+      const closeBtn = document.getElementById("closeBtn");
       const codeReader = new ZXing.BrowserMultiFormatReader();
 
       let track = null;
       let torch = false;
 
+      // Для того чтобы один результат не отправлялся несколько раз
+      let lastScanned = null;
+
       async function init() {
         try {
-          // Разрешение камеры один раз
+          // Камера запрашивается один раз при старте WebApp
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: "environment" },
           });
@@ -144,21 +159,25 @@
 
       function startScan() {
         codeReader.decodeFromVideoElementContinuously(video, (result, err) => {
-          if (result) {
+          if (result && result.text !== lastScanned) {
+            lastScanned = result.text;
+
             if (navigator.vibrate) navigator.vibrate(200);
-            hint.innerText = "Код считан";
+            hint.innerText = "Код отправлен!";
 
-            // Скрываем элементы, но не закрываем WebApp
-            video.style.display = "none";
-            document.querySelector(".scan-area").style.display = "none";
-            flashBtn.style.display = "none";
-
+            // Отправляем данные в 1С
             window.Telegram.WebApp.sendData(result.text);
+
+            // Камера остаётся активной, пользователь может продолжать сканирование
+            setTimeout(() => {
+              hint.innerText =
+                "Наведите рамку на QR-код\nДержите объект на расстоянии 10-15 см";
+            }, 1500);
           }
         });
       }
 
-      // Фонарик по кнопке
+      // Фонарик
       flashBtn.onclick = async () => {
         try {
           if (!track) return;
@@ -172,6 +191,12 @@
         } catch (e) {
           console.log(e);
         }
+      };
+
+      // Закрыть сканер
+      closeBtn.onclick = () => {
+        video.srcObject.getTracks().forEach((t) => t.stop());
+        window.Telegram.WebApp.close();
       };
 
       init();
