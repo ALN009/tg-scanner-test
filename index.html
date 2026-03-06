@@ -25,8 +25,8 @@
         width: 100vw;
         height: 100vh;
         display: flex;
-        justify-content: center;
-        align-items: center;
+        justify-content: center; /* центр по горизонтали */
+        align-items: center; /* центр по вертикали */
       }
 
       video {
@@ -39,40 +39,34 @@
         z-index: 1;
       }
 
-      /* Затемняющий overlay с "окном" */
+      /* Затемняющий overlay с прозрачным "окном" под сканер */
       .scan-overlay {
         position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.55);
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(
+          circle 130px at center,
+          transparent 0%,
+          rgba(0, 0, 0, 0.55) 100%
+        );
         pointer-events: none;
         z-index: 2;
         -webkit-transform: translateZ(0);
-        mask-image: radial-gradient(
-          circle 130px at center,
-          transparent 0%,
-          black 100%
-        );
-        -webkit-mask-image: radial-gradient(
-          circle 130px at center,
-          transparent 0%,
-          black 100%
-        );
       }
 
+      /* Рамка сканирования */
       .scan-area {
-        position: absolute;
+        position: relative; /* центрируется flex контейнером */
         width: 260px;
         height: 260px;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
         border: 2px solid rgba(255, 255, 255, 0.7);
         border-radius: 16px;
         z-index: 3;
         display: flex;
         justify-content: center;
         align-items: center;
-        -webkit-transform: translateZ(0);
       }
 
       .mini-area {
@@ -163,6 +157,7 @@
 
       async function init() {
         try {
+          // Разрешение камеры один раз
           const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: "environment" },
           });
@@ -180,14 +175,13 @@
           if (result) {
             if (navigator.vibrate) navigator.vibrate(200);
             hint.innerText = "Код считан";
-            setTimeout(() => {
-              window.Telegram.WebApp.sendData(result.text);
-              window.Telegram.WebApp.close();
-            }, 500);
+            // Отправляем данные, но не закрываем камеру сразу
+            window.Telegram.WebApp.sendData(result.text);
           }
         });
       }
 
+      // Фонарик по кнопке
       flashBtn.onclick = async () => {
         try {
           if (!track) return;
