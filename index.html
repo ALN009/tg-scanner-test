@@ -109,7 +109,7 @@
         Держите объект на расстоянии 10-15 см и наведите внутреннюю рамку на QR
         код
       </div>
-      <button id="flashBtn">Фонарик</button>
+      <button id="flashBtn">🔦 Фонарик</button>
     </div>
 
     <script>
@@ -117,38 +117,18 @@
       window.Telegram.WebApp.expand();
 
       const video = document.getElementById("video");
-      const codeReader = new ZXing.BrowserMultiFormatReader();
       const hint = document.getElementById("hint");
       const flashBtn = document.getElementById("flashBtn");
+      const codeReader = new ZXing.BrowserMultiFormatReader();
+
       let track = null;
       let torch = false;
 
       async function init() {
         try {
-          // один раз запрашиваем разрешение
-          await navigator.mediaDevices.getUserMedia({ video: true });
-
-          const devices = await codeReader.listVideoInputDevices();
-
-          let deviceId = null;
-
-          // ищем macro/close/back камеру
-          for (const d of devices) {
-            const label = d.label.toLowerCase();
-            if (
-              label.includes("macro") ||
-              label.includes("close") ||
-              label.includes("back")
-            ) {
-              deviceId = d.deviceId;
-              break;
-            }
-          }
-          // fallback на первую камеру
-          if (!deviceId && devices.length > 0) deviceId = devices[0].deviceId;
-
+          // Разрешение камеры один раз
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: deviceId } },
+            video: { facingMode: "environment" },
           });
           video.srcObject = stream;
           track = stream.getVideoTracks()[0];
@@ -172,17 +152,20 @@
         });
       }
 
-      // фонарик
+      // Фонарик по кнопке
       flashBtn.onclick = async () => {
         try {
-          const capabilities = track.getCapabilities();
-          if (!capabilities.torch) {
+          if (!track) return;
+          const cap = track.getCapabilities();
+          if (!cap.torch) {
             hint.innerText = "Фонарик не поддерживается";
             return;
           }
           torch = !torch;
           await track.applyConstraints({ advanced: [{ torch: torch }] });
-        } catch (e) {}
+        } catch (e) {
+          console.log(e);
+        }
       };
 
       init();
