@@ -43,6 +43,17 @@
         z-index: 1;
       }
 
+      /* canvas для рамки */
+      #overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 3;
+        pointer-events: none;
+      }
+
       .scan-area {
         position: relative;
         width: 260px;
@@ -82,6 +93,20 @@
         border-radius: 20px;
         z-index: 2;
       }
+
+      /* кнопка фонарика */
+
+      #flashBtn {
+        position: absolute;
+        bottom: 40px;
+        z-index: 4;
+        background: #ffffff;
+        border: none;
+        border-radius: 50px;
+        padding: 12px 20px;
+        font-size: 16px;
+        cursor: pointer;
+      }
     </style>
   </head>
 
@@ -89,11 +114,15 @@
     <div id="video-container">
       <video id="video" autoplay muted playsinline></video>
 
+      <canvas id="overlay"></canvas>
+
       <div class="scan-area">
         <div class="laser"></div>
       </div>
 
       <div id="hint">Наведите камеру на код</div>
+
+      <button id="flashBtn">🔦 Фонарик</button>
     </div>
 
     <script>
@@ -103,26 +132,24 @@
       const codeReader = new ZXing.BrowserMultiFormatReader();
 
       const video = document.getElementById("video");
+      const canvas = document.getElementById("overlay");
+      const ctx = canvas.getContext("2d");
+
       const hint = document.getElementById("hint");
+      const flashBtn = document.getElementById("flashBtn");
 
       let track = null;
-      let torchEnabled = false;
+      let torch = false;
 
       init();
 
       async function init() {
         try {
-          /* один запрос разрешения */
-
           await navigator.mediaDevices.getUserMedia({ video: true });
-
-          /* список камер */
 
           const devices = await codeReader.listVideoInputDevices();
 
           let deviceId = devices[0].deviceId;
-
-          /* ищем заднюю камеру */
 
           for (const d of devices) {
             const label = d.label.toLowerCase();
@@ -137,87 +164,91 @@
             }
           }
 
-          /* высокое разрешение */
-
-          const constraints = {
+          const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               deviceId: deviceId,
               width: { ideal: 1920 },
               height: { ideal: 1080 },
-              focusMode: "continuous",
             },
-          };
-
-          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          });
 
           video.srcObject = stream;
 
           track = stream.getVideoTracks()[0];
 
-          optimizeCamera();
+          resizeCanvas();
 
-          startDecode();
+          startScan();
         } catch (err) {
           hint.innerText = "Ошибка камеры: " + err.message;
         }
       }
 
-      function startDecode() {
+      function resizeCanvas() {
+        canvas.width = video.clientWidth;
+        canvas.height = video.clientHeight;
+      }
+
+      window.addEventListener("resize", resizeCanvas);
+
+      function startScan() {
         codeReader.decodeFromVideoElementContinuously(video, (result, err) => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
           if (result) {
+            drawBox(result.resultPoints);
+
             if (navigator.vibrate) navigator.vibrate(200);
 
             hint.innerText = "Код считан";
 
-            window.Telegram.WebApp.sendData(result.text);
-
             setTimeout(() => {
+              window.Telegram.WebApp.sendData(result.text);
               window.Telegram.WebApp.close();
             }, 500);
           }
         });
       }
 
-      /* оптимизация камеры */
+      function drawBox(points) {
+        if (!points) return;
 
-      async function optimizeCamera() {
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 4;
+
+        ctx.beginPath();
+
+        ctx.moveTo(points[0].x, points[0].y);
+
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      /* кнопка фонарика */
+
+      flashBtn.onclick = async () => {
         try {
           const capabilities = track.getCapabilities();
 
-          /* автофокус */
+          if (!capabilities.torch) {
+            hint.innerText = "Фонарик не поддерживается";
 
-          if (capabilities.focusMode) {
-            await track.applyConstraints({
-              advanced: [{ focusMode: "continuous" }],
-            });
-          } else {
-            hint.innerText =
-              "ваша камера не имеет автофокуса пожалуйста поднесите qr ближе";
+            return;
           }
 
-          /* zoom */
+          torch = !torch;
 
-          if (capabilities.zoom) {
-            await track.applyConstraints({
-              advanced: [{ zoom: capabilities.zoom.max / 2 }],
-            });
-          }
-
-          /* автофонарик */
-
-          if (capabilities.torch) {
-            setTimeout(async () => {
-              if (!torchEnabled) {
-                torchEnabled = true;
-
-                await track.applyConstraints({
-                  advanced: [{ torch: true }],
-                });
-              }
-            }, 2500);
-          }
-        } catch (e) {}
-      }
+          await track.applyConstraints({
+            advanced: [{ torch: torch }],
+          });
+        } catch (e) {
+          console.log(e);
+        }
+      };
     </script>
   </body>
 </html>
