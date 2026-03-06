@@ -105,119 +105,117 @@
       const video = document.getElementById("video");
       const hint = document.getElementById("hint");
 
-      let selectedDeviceId = null;
       let track = null;
       let torchEnabled = false;
 
-      const SCAN_TIMEOUT = 4000;
+      init();
 
-      initScanner();
-
-      async function initScanner() {
+      async function init() {
         try {
+          /* один запрос разрешения */
+
+          await navigator.mediaDevices.getUserMedia({ video: true });
+
+          /* список камер */
+
           const devices = await codeReader.listVideoInputDevices();
 
-          if (devices.length === 0) {
-            hint.innerText = "Камера не найдена";
-            return;
+          let deviceId = devices[0].deviceId;
+
+          /* ищем заднюю камеру */
+
+          for (const d of devices) {
+            const label = d.label.toLowerCase();
+
+            if (
+              label.includes("back") ||
+              label.includes("rear") ||
+              label.includes("environment")
+            ) {
+              deviceId = d.deviceId;
+              break;
+            }
           }
 
-          await selectBestCamera(devices);
+          /* высокое разрешение */
 
-          startScanner();
+          const constraints = {
+            video: {
+              deviceId: deviceId,
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              focusMode: "continuous",
+            },
+          };
+
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+          video.srcObject = stream;
+
+          track = stream.getVideoTracks()[0];
+
+          optimizeCamera();
+
+          startDecode();
         } catch (err) {
           hint.innerText = "Ошибка камеры: " + err.message;
         }
       }
 
-      async function selectBestCamera(devices) {
-        for (const device of devices) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-              video: { deviceId: device.deviceId },
-            });
+      function startDecode() {
+        codeReader.decodeFromVideoElementContinuously(video, (result, err) => {
+          if (result) {
+            if (navigator.vibrate) navigator.vibrate(200);
 
-            const testTrack = stream.getVideoTracks()[0];
-            const capabilities = testTrack.getCapabilities();
+            hint.innerText = "Код считан";
 
-            const hasAutoFocus =
-              capabilities.focusMode ||
-              capabilities.focusDistance ||
-              (capabilities.focusMode &&
-                capabilities.focusMode.includes("continuous"));
+            window.Telegram.WebApp.sendData(result.text);
 
-            const label = device.label.toLowerCase();
-
-            const isBack =
-              label.includes("back") ||
-              label.includes("rear") ||
-              label.includes("environment");
-
-            if (hasAutoFocus && isBack) {
-              selectedDeviceId = device.deviceId;
-
-              stream.getTracks().forEach((t) => t.stop());
-
-              return;
-            }
-
-            stream.getTracks().forEach((t) => t.stop());
-          } catch (e) {}
-        }
-
-        selectedDeviceId = devices[devices.length - 1].deviceId;
-
-        hint.innerText =
-          "ваша камера не имеет автофокуса пожалуйста поднесите qr ближе";
+            setTimeout(() => {
+              window.Telegram.WebApp.close();
+            }, 500);
+          }
+        });
       }
 
-      function startScanner() {
-        codeReader.decodeFromVideoDevice(
-          selectedDeviceId,
-          video,
-          (result, err) => {
-            if (result) {
-              if (navigator.vibrate) navigator.vibrate(200);
+      /* оптимизация камеры */
 
-              hint.innerText = "Код успешно считан";
-
-              window.Telegram.WebApp.sendData(result.text);
-
-              setTimeout(() => {
-                window.Telegram.WebApp.close();
-              }, 500);
-            }
-          },
-        );
-
-        setTimeout(setupCameraFeatures, 1000);
-
-        setTimeout(autoTorch, SCAN_TIMEOUT);
-      }
-
-      async function setupCameraFeatures() {
+      async function optimizeCamera() {
         try {
-          const stream = video.srcObject;
-
-          track = stream.getVideoTracks()[0];
-        } catch (e) {}
-      }
-
-      async function autoTorch() {
-        try {
-          if (!track) return;
-
           const capabilities = track.getCapabilities();
 
-          if (!capabilities.torch) return;
+          /* автофокус */
 
-          if (torchEnabled) return;
+          if (capabilities.focusMode) {
+            await track.applyConstraints({
+              advanced: [{ focusMode: "continuous" }],
+            });
+          } else {
+            hint.innerText =
+              "ваша камера не имеет автофокуса пожалуйста поднесите qr ближе";
+          }
 
-          torchEnabled = true;
+          /* zoom */
 
-          await track.applyConstraints({
-            advanced: [{ torch: true }],
-          });
+          if (capabilities.zoom) {
+            await track.applyConstraints({
+              advanced: [{ zoom: capabilities.zoom.max / 2 }],
+            });
+          }
+
+          /* автофонарик */
+
+          if (capabilities.torch) {
+            setTimeout(async () => {
+              if (!torchEnabled) {
+                torchEnabled = true;
+
+                await track.applyConstraints({
+                  advanced: [{ torch: true }],
+                });
+              }
+            }, 2500);
+          }
         } catch (e) {}
       }
     </script>
